@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Lab03 — TeleCom (Reliable)</title>
+  <link rel="stylesheet" href="style.css">
+
+  <!-- OpenCV.js for camera marker detection -->
+  <script>
+    window._cvReady = false;
+    function _onOpenCvLoad() {
+      if (typeof cv !== 'undefined' && cv.Mat !== undefined) {
+        window._cvReady = true;
+        document.dispatchEvent(new Event('opencv-ready'));
+      } else if (typeof cv !== 'undefined') {
+        cv['onRuntimeInitialized'] = function () {
+          window._cvReady = true;
+          document.dispatchEvent(new Event('opencv-ready'));
+        };
+      }
+    }
+  </script>
+  <script async src="https://docs.opencv.org/4.9.0/opencv.js" onload="_onOpenCvLoad()"></script>
+</head>
+<body>
+
+<!-- ================================================================
+     SCREEN 1 — Home (Role Selection)
+================================================================= -->
+<div id="screen-role" class="screen active">
+  <div class="home-page">
+    <h1>TeleComLab</h1>
+    <p>Lab 03 — Reliable Visual Communication System</p>
+
+    <!-- System readiness indicators -->
+    <div class="sys-strip">
+      <div class="sys-item">
+        <span class="sys-dot loading" id="cv-dot"></span>
+        <span>OpenCV</span>
+        <span id="cv-state">loading</span>
+      </div>
+      <div class="sys-item">
+        <span class="sys-dot" id="cam-dot"></span>
+        <span>Camera</span>
+        <span id="cam-state">—</span>
+      </div>
+      <div class="sys-item">
+        <span class="sys-dot" id="mic-dot"></span>
+        <span>Mic</span>
+        <span id="mic-state">—</span>
+      </div>
+    </div>
+
+    <!-- Permission button -->
+    <div id="perm-gate">
+      <button class="btn btn-primary" id="btn-grant-perms">Grant Camera &amp; Microphone Access</button>
+      <p id="perm-hint" style="margin-top:8px; color:#888; font-size:12px;">Required before selecting a role</p>
+    </div>
+
+    <!-- Role selection -->
+    <div class="role-buttons">
+      <button class="role-btn" id="btn-role-sender" disabled>Sender</button>
+      <button class="role-btn" id="btn-role-receiver" disabled>Receiver</button>
+    </div>
+
+    <div class="team-strip">
+      <span>Ansh Agrawal — 24B0909</span>
+      <span>·</span>
+      <span>Bibaswan Biswas — 24B0915</span>
+      <span>·</span>
+      <span>Prasoon Badjatya — 24B0916</span>
+      <span>·</span>
+      <span>Saksham Khandelwal — 24B0965</span>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================
+     SCREEN 2 — Sender
+================================================================= -->
+<div id="screen-sender" class="screen">
+
+  <!-- Canvas for displaying color frames -->
+  <div id="tx-canvas-wrapper">
+    <canvas id="tx-canvas"></canvas>
+    <button id="btn-fullscreen" class="fs-btn" title="Toggle fullscreen">⛶</button>
+  </div>
+
+  <div id="sender-panel">
+    <div class="panel-header">
+      <button class="back-btn" id="sender-back">← Back</button>
+      <h2 class="panel-title">Sender</h2>
+      <span id="sender-status-badge" class="status-badge idle">IDLE</span>
+    </div>
+
+    <!-- Input fields -->
+    <div class="fields">
+      <div class="field-group">
+        <label class="field-label" for="msg-bits">
+          Message bits <span class="field-hint">(max 20, 0s and 1s only)</span>
+        </label>
+        <input type="text" id="msg-bits" class="field-input mono"
+               placeholder="e.g. 0100011" maxlength="20" autocomplete="off">
+      </div>
+
+      <div class="field-row">
+        <div class="field-group half">
+          <label class="field-label" for="error-bit">
+            Error bit index <span class="field-hint">(0-indexed, optional)</span>
+          </label>
+          <input type="number" id="error-bit" class="field-input" placeholder="none" min="0" max="19">
+        </div>
+        <div class="field-group half">
+          <label class="field-label" for="rtt-time">
+            RTT: <span id="rtt-val" style="color:#2196f3;">2000</span> ms
+          </label>
+          <input type="range" id="rtt-time" class="slider" min="500" max="5000" value="2000" step="100">
+        </div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button id="btn-start-send" class="btn btn-primary" disabled>Start Transmission</button>
+      <button id="btn-reset-sender" class="btn btn-ghost">Reset</button>
+    </div>
+
+    <div id="sender-log" class="log-box"></div>
+  </div>
+</div>
+
+<!-- ================================================================
+     SCREEN 3 — Receiver
+================================================================= -->
+<div id="screen-receiver" class="screen">
+
+  <div class="panel-header">
+    <button class="back-btn" id="receiver-back">← Back</button>
+    <h2 class="panel-title">Receiver</h2>
+    <span id="receiver-status-badge" class="status-badge idle">IDLE</span>
+  </div>
+
+  <!-- Camera feed -->
+  <div class="cam-wrapper">
+    <video id="rx-video" playsinline muted autoplay></video>
+    <canvas id="rx-overlay" class="cam-overlay"></canvas>
+    <div id="camera-hint" class="cam-hint">Camera not started</div>
+  </div>
+
+  <!-- Debug info grid -->
+  <div class="debug-grid">
+    <div class="dbg-row"><span class="dbg-k">Markers</span><span id="dbg-markers" class="dbg-v">—</span></div>
+    <div class="dbg-row"><span class="dbg-k">Clock</span><span id="dbg-clock" class="dbg-v mono">—</span></div>
+    <div class="dbg-row"><span class="dbg-k">Cells</span><span id="dbg-cells" class="dbg-v mono">—</span></div>
+    <div class="dbg-row"><span class="dbg-k">Symbols</span><span id="dbg-symbols" class="dbg-v">—</span></div>
+    <div class="dbg-row full"><span class="dbg-k">Bit buf</span><span id="dbg-bits" class="dbg-v mono small">—</span></div>
+  </div>
+
+  <!-- Receiver RTT config -->
+  <div class="field-group" style="margin-bottom:12px;">
+    <label class="field-label" for="rx-rtt-time">
+      RTT: <span id="rx-rtt-val" style="color:#2196f3;">2000</span> ms
+      <span class="field-hint">(match sender's RTT)</span>
+    </label>
+    <input type="range" id="rx-rtt-time" class="slider" min="500" max="5000" value="2000" step="100">
+  </div>
+
+  <!-- Decoded result (hidden until decode) -->
+  <div id="rx-result-area" class="result-card hidden">
+    <div class="result-header">Decoded Message</div>
+    <div id="rx-message" class="result-msg mono"></div>
+    <div id="rx-err-info" class="rx-err-info ok"></div>
+    <div id="rx-meta" class="result-meta"></div>
+  </div>
+
+  <div class="btn-row">
+    <button id="btn-start-camera" class="btn btn-primary">Start Camera</button>
+    <button id="btn-calibrate" class="btn btn-primary" disabled>Calibrate</button>
+    <button id="btn-reset-receiver" class="btn btn-ghost">Reset</button>
+  </div>
+
+  <div id="receiver-log" class="log-box"></div>
+</div>
+
+<!-- Scripts: physical layer (unchanged from ref_scheme) -->
+<script src="js/layout.js"></script>
+<script src="js/hamming.js"></script>
+<script src="js/framing.js"></script>
+<script src="js/audio_tx.js"></script>
+<script src="js/audio_rx.js"></script>
+<script src="js/physical_tx.js"></script>
+<script src="js/physical_rx.js"></script>
+<!-- Protocol logic (completely rewritten) -->
+<script src="js/main.js"></script>
+</body>
+</html>
